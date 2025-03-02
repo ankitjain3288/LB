@@ -12,7 +12,7 @@ remote_region = "west"
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
-def update_handler(updated_status,updated_version,current_version):
+def update_handler_with_concurrencyCheck(updated_status,updated_version,current_version):
     retVal = false
     try:
         table.update_item(
@@ -31,6 +31,8 @@ def update_handler(updated_status,updated_version,current_version):
     except ClientError as e:
                 # Check if it's a conditional check failure (version mismatch)
                 if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                    retVal = false
+    return retVal
                     
                 
     
@@ -71,8 +73,8 @@ def lambda_handler(event, context):
         current_version = new_image.get("version", {}).get("N")
         originating_region = new_image.get("region", {}).get("S")
         if event_type == "eventA":
-            proceed = stale_read_handler(event_id)
-            if(proceed):
+            read_success = stale_read_handler(event_id)
+            if(read_success):
                 # Prepare the new version and updated data
                 updated_version = current_version + 1
                 updated_status = "processed"
@@ -82,7 +84,7 @@ def lambda_handler(event, context):
                 attempts = 0
                 
                 while attempts < max_retries:
-                    success = update_handler(updated_status,updated_version,current_version)
+                    success = update_handler_with_concurrencyCheck(updated_status,updated_version,current_version)
                     if(success)
                        new_event_id = str(uuid.uuid4())
                         new_item = {
