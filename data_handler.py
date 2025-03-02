@@ -4,11 +4,42 @@ import time
 import uuid
 import boto3
 from botocore.exceptions import ClientError
-
-TABLE_NAME = os.environ.get("TABLE_NAME", "GlobalEvents")
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
+
+
+
+def read_from_region(region, table_name, key):
+    
+    dynamodb = boto3.resource('dynamodb', region_name=region)
+    table = dynamodb.Table(table_name)
+    response = table.get_item(Key=key, ConsistentRead=True)
+    return response.get('Item')
+
+def multiRegion_read(table_name, key, regions):
+    
+    results = []
+    with ThreadPoolExecutor() as executor:
+        futures = {executor.submit(read_from_region, region, table_name, key): region for region in regions}
+        for future in as_completed(futures):
+            region = futures[future]
+            try:
+                result = future.result()
+                if result:
+                    print(f"Region {region} returned: {result}")
+                    results.append(result)
+            except Exception as e:
+                print(f"Error reading from region {region}: {e}")
+
+    if not results:
+        return None
+
+    # For demonstration, assume each item has a 'version' attribute.
+    # Choose the result with the highest version number.
+    quorum_item = max(results, key=lambda x: int(x.get('version', 0)))
+    return quorum_item
 
 def lambda_handler(event, context):
     """
