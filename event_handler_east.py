@@ -4,7 +4,6 @@ import time
 import uuid
 import boto3
 from botocore.exceptions import ClientError
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 table_name="NetworkEvents"
 local_region = "east"
