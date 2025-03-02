@@ -1,6 +1,4 @@
-Below are the steps to setup the aws services to acheieve the task using aws cli
 
-step1: create a dynamo db in region 1 and region 2 and link them to make them single global table
 
 aws dynamodb create-table --table-name NetworkEvents --attribute-definitions AttributeName=event_id,AttributeType=S --key-schema AttributeName=event_id,keytype=HASH \
 --stream-specification StreamEnabled=true,StreamViewType= NEW_AND_OLD_IMAGES --region us-east-1
@@ -12,36 +10,19 @@ aws dynamodb create-table --table-name NetworkEvents --attribute-definitions Att
 
 aws dynamodb create-global-table --global-table-name NetworkEvents --replication group RegionName = us-east-1 RegionName = us-west-1
 
-aws lambda create-function \
-    --function-name ProcessEventsEast \
-    --runtime python3.9 \
-    --role arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_ARN> \
-    --handler lambda_function.lambda_handler \
-    --zip-file fileb://lambda_function_east.zip \
-    --environment Variables="{TABLE_NAME=GlobalEvents}" \
-    --region us-east-1
+aws lambda create-function --function-name ProcessNetworkEventsEast --runtime python3.9 --handler lambda_function.lambda_handler \
+    --zip-file lambda_function_east.zip --environment Variables="{TABLE_NAME=NetworkEvents}" --region us-east-1
 
-aws lambda create-function \
-    --function-name ProcessEventsWest \
-    --runtime python3.9 \
-    --role arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_ARN> \
-    --handler lambda_function.lambda_handler \
-    --zip-file fileb://lambda_function_west.zip \
-    --environment Variables="{TABLE_NAME=GlobalEvents}" \
-    --region us-west-2
+aws lambda create-function --function-name ProcessNetworkEventsWest --runtime python3.9 --handler lambda_function.lambda_handler --zip-file lambda_function_west.zip \
+    --environment Variables="{TABLE_NAME=NetworkEvents}" --region us-west-2
 
-STREAM_ARN_EAST=$(aws dynamodb describe-table \
-    --table-name GlobalEvents \
-    --region us-east-1 \
-    --query "Table.LatestStreamArn" \
-    --output text)
-echo $STREAM_ARN_EAST
+STREAM_ARN_EAST=$(aws dynamodb describe-table --table-name NetworkEvents --region us-east-1 --query "Table.LatestStreamArn" --output text)
 
-STREAM_ARN_WEST=$(aws dynamodb describe-table \
-    --table-name GlobalEvents \
-    --region us-west-2 \
-    --query "Table.LatestStreamArn" \
-    --output text)
-echo $STREAM_ARN_WEST
+
+STREAM_ARN_WEST=$(aws dynamodb describe-table --table-name NetworkEvents --region us-west-2 --query "Table.LatestStreamArn" --output text)
+
+aws lambda create-event-source-mapping --function-name ProcessNetworkEventsEast --event-source $STREAM_ARN_EAST  --region us-east-1
+
+aws lambda create-event-source-mapping --function-name ProcessNetworkEventsWest --event-source $STREAM_ARN_WEST  --region us-west-1
 
 
