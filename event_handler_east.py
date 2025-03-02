@@ -83,9 +83,18 @@ def lambda_handler(event, context):
                 attempts = 0
                 
                 while attempts < max_retries:
-                    success = update_handler()
+                    success = update_handler(updated_status,updated_version,current_version)
                     if(success)
-                       break;
+                       new_event_id = str(uuid.uuid4())
+                        new_item = {
+                            "event_id": new_event_id,
+                            "event_type": "EventB",
+                            "source_event_id": event_id,
+                            "version": 0,          # Start at version 0 for the new item
+                            "status": "new"
+                        }
+                        table.put_item(Item=new_item)
+                        break;
                     # Re-read the item to get the latest version
                     latest_item = table.get_item(Key={"event_id": event_id}).get("Item", {})
                     latest_version = latest_item.get("version", 0)
@@ -95,24 +104,5 @@ def lambda_handler(event, context):
                     updated_version = current_version + 1
                     attempts += 1
                     time.sleep(1)  # simple backoff
-                        
-
-        if success:
-            # 2) Create a new 'Event B' item (or transform from A to B)
-            new_event_id = str(uuid.uuid4())
-            new_item = {
-                "event_id": new_event_id,
-                "event_type": "EventB",
-                "source_event_id": event_id,
-                "version": 0,          # Start at version 0 for the new item
-                "status": "new"
-            }
-            try:
-                table.put_item(Item=new_item)
-                print(f"Created new EventB: {new_event_id}, from source: {event_id}")
-            except Exception as e:
-                print(f"Error creating new EventB {new_event_id}: {str(e)}")
-        else:
-            print(f"Failed to update item {event_id} after {max_retries} attempts.")
 
     return {"statusCode": 200, "body": json.dumps("Stream processing complete.")}
