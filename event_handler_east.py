@@ -12,12 +12,17 @@ remote_region = "west"
 dynamodb_local = boto3.resource("dynamodb")
 table_local = dynamodb_local.Table(table_name)
 
+def handle_conflictingUpdate(present_data, updated_data):
 
-def handleDataLossDueToConcurrentUpdate(new_data, old_data):
-    final_data = {}
-    for key in set(old_data.keys()).union(new_data.keys()):
-        # Merge logic: Keep the latest value at attribute level
-        final_data[key] = new_data.get(key,old_data.get(key))
+    for key, value in updated_data.items():
+
+        # Merge logic: Keep the latest value based on timestamp
+        if updated_data["timestamp"] > present_data["timestamp"]:
+            final_data[key] = value
+
+    # Update timestamp and increment version
+    final_data["timestamp"] = max(present_data["timestamp"], updated_data["timestamp"])
+    final_data["Version"] = present_data["Version"] + 1
 
     return final_data
 
@@ -31,6 +36,7 @@ def CreateNewEvent(event_id)
             "source_event_id": event_id,
             "source":"my_lambda"
             "version": 0,          # Start at version 0 for the new item
+            "timestamp":epoch_time_data
             
         }
         table.put_item(Item=new_item)
@@ -44,9 +50,8 @@ def handleReplicationRecordEvent(new_data, old_data,operation_type)
          publish_message_to_queue()
          return
     if new_data["version"] <= old_data["version"]:
-        resolved_data = handleDataLossDueToConcurrentUpdate()
+        resolved_data = handle_conflictingUpdate(old_data,new_data)
         if resolved_data != new_data:
-                resolved_data["version"] = new_data["version"]+1
                 try:
                     
                     table.put_item(
@@ -112,7 +117,7 @@ def lambda_handler(event, context):
     for record in event.get("Records", []):
         
         new_image = record["dynamodb"].get("NewImage", {})
-        Old_image = record["dynamodb"].get("NewImage", {})
+        Old_image = record["dynamodb"].get("Old_image", {})
         id = new_image.get("id", {}).get("S")
         event_type = new_image.get("event_type", {}).get("S")
         record_operation_type = record['eventName']
