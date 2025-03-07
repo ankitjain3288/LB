@@ -36,7 +36,11 @@ def CreateNewEvent(event_id)
         
         return
 
-def handleReplicationRecordEvent(new_data, old_data)
+def handleReplicationRecordEvent(new_data, old_data,operation_type)
+    event_type = new_image.get("event_type", {}).get("S")
+    if(operation_type=="INSERT" and event_type == "EventB")
+         publish_message_to_queue()
+         return
     if new_data["version"] <= old_data["version"]:
         resolved_data = handleDataLossDueToConcurrentUpdate()
         if resolved_data != new_data:
@@ -107,13 +111,13 @@ def lambda_handler(event, context):
         Old_image = record["dynamodb"].get("NewImage", {})
         id = new_image.get("id", {}).get("S")
         event_type = new_image.get("event_type", {}).get("S")
-        
+        record_operation_type = record['eventName']
         #current_version = new_image.get("version", {}).get("N")
         region = new_image.get("region", {}).get("S")
-        if region == local_region and event_type == "EventA":
+        if region == local_region and event_type == "EventA" and record_operation_type == 'INSERT':
             if handleLocalRecordEvent(id,region) = True
                 CreateNewEvent(id)
         else
-            handleReplicationRecordEvent(new_image,old_image)
+            handleReplicationRecordEvent(new_image,old_image,record_operation_type)
 
     return {"statusCode": 200, "body": json.dumps("Stream processing complete.")}
