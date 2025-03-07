@@ -27,9 +27,11 @@ def CreateNewEvent(event_id)
         new_item = {
             "event_id": new_event_id,
             "event_type": "EventB",
-            "source_event_id": event_id,
-            "version": 0,          # Start at version 0 for the new item
             "status": "new"
+            "source_event_id": event_id,
+            "source":"my_lambda"
+            "version": 0,          # Start at version 0 for the new item
+            
         }
         table.put_item(Item=new_item)
         break;
@@ -38,7 +40,7 @@ def CreateNewEvent(event_id)
 
 def handleReplicationRecordEvent(new_data, old_data,operation_type)
     event_type = new_image.get("event_type", {}).get("S")
-    if(operation_type=="INSERT" and event_type == "EventB")
+    if(event_type == "EventB")
          publish_message_to_queue()
          return
     if new_data["version"] <= old_data["version"]:
@@ -78,14 +80,16 @@ def handleLocalUpdateForEvent(id,region):
         current_version = item.get('version')
         updated_version = current_version + 1
         updated_status = "processed"
+        updated_src = "mylambda"
         try:
             table_local.update_item(
                     Key={"id": id},
-                    UpdateExpression="SET #st = :st, version = :new_version",
+                    UpdateExpression="SET #st = :st, #src = :src, version = :new_version",
                     ConditionExpression="version = :expected_version",
-                    ExpressionAttributeNames={"#st": "status"},
+                    ExpressionAttributeNames={"#st": "status","#src": "source"},
                     ExpressionAttributeValues={
                         ":st": updated_status,
+                        ":src": updated_src,
                         ":new_version": updated_version,
                         ":expected_version": current_version
                     }
@@ -104,7 +108,7 @@ def handleLocalUpdateForEvent(id,region):
 
 
 def lambda_handler(event, context):
-    # we will have each items having version , region as attributes in global table
+    # we will have each items having version , region as attributes in global table and source name
     for record in event.get("Records", []):
         
         new_image = record["dynamodb"].get("NewImage", {})
@@ -112,10 +116,12 @@ def lambda_handler(event, context):
         id = new_image.get("id", {}).get("S")
         event_type = new_image.get("event_type", {}).get("S")
         record_operation_type = record['eventName']
+        src_name = new_image.get("source", {}).get("S")
         #current_version = new_image.get("version", {}).get("N")
         region = new_image.get("region", {}).get("S")
-        if region == local_region and event_type == "EventA" and record_operation_type == 'INSERT':
-            if handleLocalRecordEvent(id,region) = True
+        if region == local_region 
+            if event_type == "EventA" and src_name != "mylambda":
+                handleLocalRecordEvent(id,region) = True
                 CreateNewEvent(id)
         else
             handleReplicationRecordEvent(new_image,old_image,record_operation_type)
