@@ -13,15 +13,13 @@ dynamodb_local = boto3.resource("dynamodb")
 table_local = dynamodb_local.Table(table_name)
 
 def handle_conflictingUpdate(present_data, updated_data):
-
-    for key, value in updated_data.items():
-
-        # Merge logic: Keep the latest value based on timestamp
-        if updated_data["timestamp"] > present_data["timestamp"]:
-            final_data[key] = value
-
+    final_data = {}
+    if(updated_data)        
+        if(present_data["timestamp"] < = updated_data["timestamp"])
+            return updated_data
+            
     # Update timestamp and increment version
-    final_data["timestamp"] = max(present_data["timestamp"], updated_data["timestamp"])
+    final_data = present_data
     final_data["Version"] = present_data["Version"] + 1
 
     return final_data
@@ -36,7 +34,7 @@ def CreateNewEvent(event_id)
             "source_event_id": event_id,
             "source":"my_lambda"
             "version": 0,          # Start at version 0 for the new item
-            "timestamp":epoch_time_data
+            "timestamp":getEpochTime()
             
         }
         table.put_item(Item=new_item)
@@ -46,14 +44,16 @@ def CreateNewEvent(event_id)
 
 def handleReplicationRecordEvent(new_data, old_data,operation_type)
     event_type = new_image.get("event_type", {}).get("S")
+    #assuming eventb has to be pushed on region A and sent to producer on region B
     if(event_type == "EventB")
          publish_message_to_queue()
          return
-    if new_data["version"] <= old_data["version"]:
+    if  operation_type == "UPDATE" and new_data["version"] <= old_data["version"]:
+        
         resolved_data = handle_conflictingUpdate(old_data,new_data)
         if resolved_data != new_data:
                 try:
-                    
+                    resolved_data["timestamp"] = getEpochTime()
                     table.put_item(
                         Item=resolved_data,
                         ConditionExpression="Version = :expected_version",
@@ -67,7 +67,7 @@ def handleReplicationRecordEvent(new_data, old_data,operation_type)
 def read_remote_region(id):
     dynamodb_remote = boto3.resource('dynamodb', region_name=remote_region)
     table_remote = dynamodb_remote.Table(table_name)
-    response = table.get_item(Key=id, ConsistentRead=True)
+    response = table_remote.get_item(Key=id, ConsistentRead=True)
     return response.get('Item')
 
 def stale_read_handler(id):
@@ -80,9 +80,10 @@ def stale_read_handler(id):
 
 def handleLocalUpdateForEvent(id,region):
     item_local = table_local.get_item(Key=id, ConsistentRead=True)
+    #read remote region to avoid stale read processing
     item_remote = read_remote_region(id)
-    if item_local.get('version') > item_remote.get('version')
-        current_version = item.get('version')
+    if item_remote and item_local.get('version') == item_remote.get('version')
+        current_version = item_local.get('version')
         updated_version = current_version + 1
         updated_status = "processed"
         updated_src = "mylambda"
